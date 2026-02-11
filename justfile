@@ -1,18 +1,25 @@
 app := "Sleepless"
-build_dir := "build"
-app_bundle := build_dir / app + ".app"
+app_bundle := "build" / app + ".app"
 
 build:
+    swift build -c release
     mkdir -p {{app_bundle}}/Contents/MacOS
+    cp .build/release/{{app}} {{app_bundle}}/Contents/MacOS/{{app}}
     cp Info.plist {{app_bundle}}/Contents/
-    swiftc Sources/main.swift -o {{app_bundle}}/Contents/MacOS/{{app}} -framework Cocoa
 
-install: build
-    cp -r {{app_bundle}} /Applications/
-    @echo "Installed to /Applications/{{app}}.app"
-
-clean:
-    rm -rf {{build_dir}}
+test:
+    swift test
 
 run: build
     open {{app_bundle}}
+
+install: build setup-sudoers
+    cp -r {{app_bundle}} /Applications/
+    @echo "Installed to /Applications/{{app}}.app"
+
+setup-sudoers:
+    bash scripts/setup-sudoers.sh
+
+clean:
+    swift package clean
+    rm -rf build
