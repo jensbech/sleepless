@@ -4,6 +4,19 @@ A macOS menu bar app that shows whether your Mac can sleep. Polls `pmset` every 
 
 ![demo](demo.png)
 
+| Sleep enabled | Sleep disabled |
+|---|---|
+| ![inactive](assets/inactive.png) | ![active](assets/active.png) |
+
+## Features
+
+- Toggle sleep on/off from the menu bar
+- Timed disable — "Disable Sleep for 30 min / 1 hour / 2 hours" with auto-re-enable
+- Timed re-enable — "Enable Sleep in 30 min / 1 hour / 2 hours" when already disabled
+- Live countdown in the menu while a timer is running
+- Uses `pmset disablesleep` — prevents sleep even when the lid is closed
+- Re-enables sleep on quit
+
 ## Setup
 
 Requires `just`, Swift 5.9+, and Xcode command line tools.
@@ -12,24 +25,10 @@ Requires `just`, Swift 5.9+, and Xcode command line tools.
 just build           # compile the app bundle
 just test            # run unit tests
 just run             # build and launch
-just install         # build and copy to /Applications
-just setup-sudoers   # install passwordless sudoers rule for pmset
+just install         # build, setup sudoers, copy to /Applications
 just clean           # remove build artifacts
 ```
 
 ### Sudoers
 
-Sleepless uses `sudo pmset disablesleep` to toggle sleep (required for lid-close prevention). Run `just setup-sudoers` to install a scoped sudoers rule that allows this without a password prompt. The `just install` command will remind you if the rule is missing.
-
-## Manual Test Plan
-
-1. `just build` succeeds without errors
-2. `just test` — all unit tests pass
-3. `just run` — app appears in menu bar with white moon icon
-4. Click icon — menu shows "Sleep: Enabled" with disable options and timer presets
-5. Click "Disable Sleep" — icon changes to yellow eye, menu shows "Enable Sleep"
-6. Verify: `pmset -g | grep -i sleep` shows `SleepDisabled 1`
-7. Click "Enable Sleep" — icon returns to white moon
-8. Click "Disable Sleep for 30 min" — icon changes to yellow eye, menu shows countdown
-9. While timer running, click "Enable Sleep Now" — timer cancels, sleep re-enables
-10. Quit while sleep disabled — sleep is re-enabled on exit
+Sleepless uses `sudo pmset disablesleep` to toggle sleep (required for lid-close prevention). The `just install` command will automatically set up a scoped sudoers rule in `/etc/sudoers.d/sleepless` that allows this without a password prompt. You'll be asked to confirm before it's installed.
