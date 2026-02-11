@@ -10,13 +10,66 @@ public final class SleepManager: TimerManagerDelegate {
     public private(set) var isSleepDisabled: Bool = false
     public let timerManager = TimerManager()
     private let shell: ShellExecuting
+    private var fileWatcherSource: DispatchSourceFileSystemObject?
+
+    private static let pmsetPlistPath = "/Library/Preferences/com.apple.PowerManagement.plist"
 
     public init(shell: ShellExecuting = ShellExecutor()) {
         self.shell = shell
         timerManager.delegate = self
     }
 
-    // MARK: - Polling
+    deinit {
+        stopWatching()
+    }
+
+    // MARK: - File Watching
+
+    /// Start watching the pmset plist for changes. Call once on app launch.
+    public func startWatching() {
+        setupFileWatcher()
+    }
+
+    public func stopWatching() {
+        fileWatcherSource?.cancel()
+        fileWatcherSource = nil
+    }
+
+    private func setupFileWatcher() {
+        fileWatcherSource?.cancel()
+
+        let fd = open(Self.pmsetPlistPath, O_EVTONLY)
+        guard fd >= 0 else {
+            // File doesn't exist yet — retry after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.setupFileWatcher()
+            }
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .attrib],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            self?.poll()
+            // Re-create watcher in case the file was replaced atomically
+            let events = source.data
+            if events.contains(.delete) || events.contains(.rename) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.setupFileWatcher()
+                }
+            }
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        source.resume()
+        fileWatcherSource = source
+    }
+
+    // MARK: - Status Check
 
     public func poll() {
         let (_, output) = shell.run(executable: "/usr/bin/pmset", arguments: ["-g"])

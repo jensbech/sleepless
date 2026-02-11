@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 import SleeplessKit
 
 class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
@@ -9,11 +10,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         sleepManager.delegate = self
+        sleepManager.startWatching()
 
-        sleepManager.poll()
-        updateUI()
+        // Defer initial poll so the run loop and status item are fully ready
+        DispatchQueue.main.async { [self] in
+            sleepManager.poll()
+            updateUI()
+        }
 
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // Fallback poll for runtime-only changes (disablesleep doesn't write to plist)
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             self?.sleepManager.poll()
         }
     }
@@ -85,6 +91,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         }
 
         menu.addItem(.separator())
+
+        let launchItem = NSMenuItem(
+            title: "Open at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchItem.target = self
+        launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        menu.addItem(launchItem)
+
+        menu.addItem(.separator())
         addItem(to: menu, title: "Quit", action: #selector(quitApp), key: "q")
 
         statusItem.menu = menu
@@ -130,10 +144,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         sleepManager.enableSleep(after: 120 * 60)
     }
 
-    @objc func quitApp() {
-        if sleepManager.isSleepDisabled {
-            sleepManager.enableSleep()
+    @objc func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            // Silently ignore — user can retry
         }
+        buildMenu()
+    }
+
+    @objc func quitApp() {
         NSApp.terminate(nil)
     }
 }

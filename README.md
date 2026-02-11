@@ -1,6 +1,6 @@
 # Sleepless
 
-A macOS menu bar app that shows whether your Mac can sleep. Polls `pmset` every 5 seconds and displays a moon icon (sleep enabled) or a yellow eye icon (sleep disabled). Click to toggle, or set a timer to auto-re-enable sleep.
+A macOS menu bar app that shows whether your Mac can sleep. Watches the pmset plist for changes and displays a moon icon (sleep enabled) or a yellow eye icon (sleep disabled). Click to toggle, or set a timer to auto-re-enable sleep.
 
 ![demo](demo.png)
 
@@ -15,6 +15,7 @@ A macOS menu bar app that shows whether your Mac can sleep. Polls `pmset` every 
 - Timed re-enable — "Enable Sleep in 30 min / 1 hour / 2 hours" when already disabled
 - Live countdown in the menu while a timer is running
 - Uses `pmset disablesleep` — prevents sleep even when the lid is closed
+- Instant detection of external changes via file system watcher (no polling)
 - Re-enables sleep on quit
 
 ## Setup
