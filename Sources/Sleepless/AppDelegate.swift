@@ -8,7 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
     let sleepManager = SleepManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         sleepManager.delegate = self
         sleepManager.startWatching()
 
@@ -39,18 +39,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
 
     func updateIcon() {
         guard let button = statusItem.button else { return }
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         if sleepManager.isSleepDisabled {
             let image = NSImage(
                 systemSymbolName: "eye.fill",
-                accessibilityDescription: "Sleep Disabled")
+                accessibilityDescription: "Sleep Disabled")?
+                .withSymbolConfiguration(config)
             image?.isTemplate = false
             button.image = image?.withTintColor(.systemYellow)
         } else {
             let image = NSImage(
-                systemSymbolName: "moon.zzz",
-                accessibilityDescription: "Sleep Enabled")
-            image?.isTemplate = true
-            button.image = image
+                systemSymbolName: "bed.double.fill",
+                accessibilityDescription: "Sleep Enabled")?
+                .withSymbolConfiguration(config)
+            image?.isTemplate = false
+            button.image = image?.withTintColor(
+                NSColor(red: 0.4, green: 0.72, blue: 0.45, alpha: 1.0))
         }
     }
 
