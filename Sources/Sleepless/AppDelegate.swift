@@ -6,6 +6,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
     var statusItem: NSStatusItem!
     var pollTimer: Timer?
     let sleepManager = SleepManager()
+    private var statusMenuItem: NSMenuItem?
+    private var lastKnownSleepDisabled: Bool?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -24,10 +26,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        if sleepManager.isSleepDisabled {
+            sleepManager.enableSleep()
+        }
+    }
+
     // MARK: - SleepManagerDelegate
 
     func sleepStateDidChange(disabled: Bool, timerRemaining: TimeInterval?) {
-        updateUI()
+        let stateChanged = disabled != lastKnownSleepDisabled
+        lastKnownSleepDisabled = disabled
+
+        if stateChanged {
+            updateUI()
+        } else {
+            updateStatusTitle()
+        }
     }
 
     // MARK: - UI
@@ -35,6 +50,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
     func updateUI() {
         updateIcon()
         buildMenu()
+    }
+
+    private func updateStatusTitle() {
+        guard sleepManager.isSleepDisabled, sleepManager.timerManager.isActive else { return }
+        let fmt = TimerManager.format(sleepManager.timerManager.remaining)
+        statusMenuItem?.title = "Sleep: Disabled (\(fmt) remaining)"
     }
 
     func updateIcon() {
@@ -53,8 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
                 accessibilityDescription: "Sleep Enabled")?
                 .withSymbolConfiguration(config)
             image?.isTemplate = false
-            button.image = image?.withTintColor(
-                NSColor(red: 0.4, green: 0.72, blue: 0.45, alpha: 1.0))
+            button.image = image?.withTintColor(.systemGreen)
         }
     }
 
@@ -76,6 +96,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         let item = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
         item.isEnabled = false
         menu.addItem(item)
+        statusMenuItem = item
         menu.addItem(.separator())
 
         if sleepManager.isSleepDisabled {
@@ -96,11 +117,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
 
         menu.addItem(.separator())
 
-        let launchItem = NSMenuItem(
-            title: "Open at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchItem.target = self
+        let launchItem = addItem(to: menu, title: "Open at Login", action: #selector(toggleLaunchAtLogin))
         launchItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(launchItem)
 
         menu.addItem(.separator())
         addItem(to: menu, title: "Quit", action: #selector(quitApp), key: "q")
@@ -108,10 +126,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         statusItem.menu = menu
     }
 
-    private func addItem(to menu: NSMenu, title: String, action: Selector, key: String = "") {
+    @discardableResult
+    private func addItem(to menu: NSMenu, title: String, action: Selector, key: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
+        return item
     }
 
     // MARK: - Actions
@@ -171,12 +191,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
 
 extension NSImage {
     func withTintColor(_ color: NSColor) -> NSImage {
-        let tinted = self.copy() as! NSImage
-        tinted.lockFocus()
-        color.set()
-        let rect = NSRect(origin: .zero, size: tinted.size)
-        rect.fill(using: .sourceAtop)
-        tinted.unlockFocus()
-        return tinted
+        let size = self.size
+        return NSImage(size: size, flipped: false) { rect in
+            self.draw(in: rect)
+            color.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
     }
 }
