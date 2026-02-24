@@ -6,9 +6,9 @@ public protocol SleepManagerDelegate: AnyObject {
 
 public final class SleepManager: TimerManagerDelegate {
     public weak var delegate: SleepManagerDelegate?
-
     public private(set) var isSleepDisabled: Bool = false
     public let timerManager = TimerManager()
+
     private let shell: ShellExecuting
     private var fileWatcherSource: DispatchSourceFileSystemObject?
 
@@ -23,9 +23,6 @@ public final class SleepManager: TimerManagerDelegate {
         stopWatching()
     }
 
-    // MARK: - File Watching
-
-    /// Start watching the pmset plist for changes. Call once on app launch.
     public func startWatching() {
         setupFileWatcher()
     }
@@ -40,7 +37,6 @@ public final class SleepManager: TimerManagerDelegate {
 
         let fd = open(Self.pmsetPlistPath, O_EVTONLY)
         guard fd >= 0 else {
-            // File doesn't exist yet — retry after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.setupFileWatcher()
             }
@@ -54,7 +50,6 @@ public final class SleepManager: TimerManagerDelegate {
         )
         source.setEventHandler { [weak self] in
             self?.poll()
-            // Re-create watcher in case the file was replaced atomically
             let events = source.data
             if events.contains(.delete) || events.contains(.rename) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -62,14 +57,10 @@ public final class SleepManager: TimerManagerDelegate {
                 }
             }
         }
-        source.setCancelHandler {
-            close(fd)
-        }
+        source.setCancelHandler { close(fd) }
         source.resume()
         fileWatcherSource = source
     }
-
-    // MARK: - Status Check
 
     public func poll() {
         let (_, output) = shell.run(executable: "/usr/bin/pmset", arguments: ["-g"])
@@ -77,7 +68,6 @@ public final class SleepManager: TimerManagerDelegate {
         let changed = disabled != isSleepDisabled
         isSleepDisabled = disabled
 
-        // If something external re-enabled sleep while our timer was running, cancel it.
         if !disabled && timerManager.isActive {
             timerManager.stop()
         }
@@ -86,8 +76,6 @@ public final class SleepManager: TimerManagerDelegate {
             notifyDelegate()
         }
     }
-
-    // MARK: - Toggle
 
     public func enableSleep() {
         timerManager.stop()
@@ -107,13 +95,10 @@ public final class SleepManager: TimerManagerDelegate {
         timerManager.start(duration: duration)
     }
 
-    /// Start a timer to re-enable sleep after a duration (when sleep is already disabled).
     public func enableSleep(after duration: TimeInterval) {
         timerManager.start(duration: duration)
         notifyDelegate()
     }
-
-    // MARK: - TimerManagerDelegate
 
     public func timerDidTick(remaining: TimeInterval) {
         notifyDelegate()
@@ -122,8 +107,6 @@ public final class SleepManager: TimerManagerDelegate {
     public func timerDidExpire() {
         enableSleep()
     }
-
-    // MARK: - Private
 
     private func notifyDelegate() {
         let remaining: TimeInterval? = timerManager.isActive ? timerManager.remaining : nil

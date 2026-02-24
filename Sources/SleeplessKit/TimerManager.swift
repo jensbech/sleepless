@@ -7,7 +7,6 @@ public protocol TimerManagerDelegate: AnyObject {
 
 public final class TimerManager {
     public weak var delegate: TimerManagerDelegate?
-
     public private(set) var remaining: TimeInterval = 0
     public var isActive: Bool { remaining > 0 }
 
@@ -41,7 +40,6 @@ public final class TimerManager {
         }
     }
 
-    /// Format remaining seconds as "M:SS" or "H:MM:SS".
     public static func format(_ interval: TimeInterval) -> String {
         let total = Int(max(0, interval))
         let h = total / 3600

@@ -2,10 +2,10 @@ import Cocoa
 import ServiceManagement
 import SleeplessKit
 
-class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
-    var statusItem: NSStatusItem!
-    var pollTimer: Timer?
-    let sleepManager = SleepManager()
+final class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
+    private var statusItem: NSStatusItem!
+    private var pollTimer: Timer?
+    private let sleepManager = SleepManager()
     private var statusMenuItem: NSMenuItem?
     private var lastKnownSleepDisabled: Bool?
 
@@ -14,13 +14,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         sleepManager.delegate = self
         sleepManager.startWatching()
 
-        // Defer initial poll so the run loop and status item are fully ready
         DispatchQueue.main.async { [self] in
             sleepManager.poll()
             updateUI()
         }
 
-        // Fallback poll for runtime-only changes (disablesleep doesn't write to plist)
         pollTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             self?.sleepManager.poll()
         }
@@ -32,71 +30,56 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         }
     }
 
-    // MARK: - SleepManagerDelegate
-
     func sleepStateDidChange(disabled: Bool, timerRemaining: TimeInterval?) {
         let stateChanged = disabled != lastKnownSleepDisabled
         lastKnownSleepDisabled = disabled
-
-        if stateChanged {
-            updateUI()
-        } else {
-            updateStatusTitle()
-        }
+        stateChanged ? updateUI() : updateStatusTitle()
     }
 
-    // MARK: - UI
-
-    func updateUI() {
+    private func updateUI() {
         updateIcon()
         buildMenu()
     }
 
     private func updateStatusTitle() {
         guard sleepManager.isSleepDisabled, sleepManager.timerManager.isActive else { return }
-        let fmt = TimerManager.format(sleepManager.timerManager.remaining)
-        statusMenuItem?.title = "Sleep: Disabled (\(fmt) remaining)"
+        statusMenuItem?.title = "Sleep: Disabled (\(TimerManager.format(sleepManager.timerManager.remaining)) remaining)"
     }
 
-    func updateIcon() {
+    private func updateIcon() {
         guard let button = statusItem.button else { return }
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         if sleepManager.isSleepDisabled {
-            let image = NSImage(
-                systemSymbolName: "eye.fill",
-                accessibilityDescription: "Sleep Disabled")?
+            let image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "Sleep Disabled")?
                 .withSymbolConfiguration(config)
             image?.isTemplate = false
             button.image = image?.withTintColor(.systemYellow)
         } else {
-            let image = NSImage(
-                systemSymbolName: "bed.double.fill",
-                accessibilityDescription: "Sleep Enabled")?
+            let image = NSImage(systemSymbolName: "bed.double.fill", accessibilityDescription: "Sleep Enabled")?
                 .withSymbolConfiguration(config)
             image?.isTemplate = false
             button.image = image?.withTintColor(.systemGreen)
         }
     }
 
-    func buildMenu() {
+    private func buildMenu() {
         let menu = NSMenu()
 
-        // Status line
         let statusText: String
         if sleepManager.isSleepDisabled {
             if sleepManager.timerManager.isActive {
-                let fmt = TimerManager.format(sleepManager.timerManager.remaining)
-                statusText = "Sleep: Disabled (\(fmt) remaining)"
+                statusText = "Sleep: Disabled (\(TimerManager.format(sleepManager.timerManager.remaining)) remaining)"
             } else {
                 statusText = "Sleep: Disabled"
             }
         } else {
             statusText = "Sleep: Enabled"
         }
-        let item = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        menu.addItem(item)
-        statusMenuItem = item
+
+        let statusItem = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
+        statusItem.isEnabled = false
+        menu.addItem(statusItem)
+        statusMenuItem = statusItem
         menu.addItem(.separator())
 
         if sleepManager.isSleepDisabled {
@@ -123,7 +106,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         menu.addItem(.separator())
         addItem(to: menu, title: "Quit", action: #selector(quitApp), key: "q")
 
-        statusItem.menu = menu
+        self.statusItem.menu = menu
     }
 
     @discardableResult
@@ -134,60 +117,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, SleepManagerDelegate {
         return item
     }
 
-    // MARK: - Actions
+    @objc private func enableSleep()  { sleepManager.enableSleep() }
+    @objc private func disableSleep() { sleepManager.disableSleep() }
+    @objc private func disable30()    { sleepManager.disableSleep(for: 30 * 60) }
+    @objc private func disable60()    { sleepManager.disableSleep(for: 60 * 60) }
+    @objc private func disable120()   { sleepManager.disableSleep(for: 120 * 60) }
+    @objc private func enable30()     { sleepManager.enableSleep(after: 30 * 60) }
+    @objc private func enable60()     { sleepManager.enableSleep(after: 60 * 60) }
+    @objc private func enable120()    { sleepManager.enableSleep(after: 120 * 60) }
 
-    @objc func enableSleep() {
-        sleepManager.enableSleep()
-    }
-
-    @objc func disableSleep() {
-        sleepManager.disableSleep()
-    }
-
-    @objc func disable30() {
-        sleepManager.disableSleep(for: 30 * 60)
-    }
-
-    @objc func disable60() {
-        sleepManager.disableSleep(for: 60 * 60)
-    }
-
-    @objc func disable120() {
-        sleepManager.disableSleep(for: 120 * 60)
-    }
-
-    @objc func enable30() {
-        sleepManager.enableSleep(after: 30 * 60)
-    }
-
-    @objc func enable60() {
-        sleepManager.enableSleep(after: 60 * 60)
-    }
-
-    @objc func enable120() {
-        sleepManager.enableSleep(after: 120 * 60)
-    }
-
-    @objc func toggleLaunchAtLogin() {
+    @objc private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
-            }
-        } catch {
-            // Silently ignore — user can retry
+        if service.status == .enabled {
+            try? service.unregister()
+        } else {
+            try? service.register()
         }
         buildMenu()
     }
 
-    @objc func quitApp() {
+    @objc private func quitApp() {
         NSApp.terminate(nil)
     }
 }
-
-// MARK: - NSImage tinting helper
 
 extension NSImage {
     func withTintColor(_ color: NSColor) -> NSImage {
